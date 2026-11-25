@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rome Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #app { display: flex; flex-direction: column; height: 100%; }
+
+    header {
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    #status { font-size: 12px; color: #888; }
+    #status.ok { color: #4ade80; }
+    #status.err { color: #f87171; }
+
+    .btn {
+      background: #333;
+      color: #eee;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn.primary { background: #2563eb; }
+    .btn:active { opacity: 0.8; }
+
+    main { flex: 1; position: relative; display: flex; overflow: hidden; }
+    #map { flex: 1; height: 100%; }
+
+    #panel {
+      width: 300px;
+      max-width: 85vw;
+      background: #1a1a1a;
+      border-left: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+    }
+    #panel.hidden { display: none; }
+
+    .panel-top {
+      padding: 10px 12px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-top h2 { font-size: 14px; }
+
+    #progress {
+      font-size: 12px;
+      color: #888;
+      padding: 6px 12px 0;
+    }
+
+    .filters {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      border-bottom: 1px solid #333;
+    }
+    .filters button {
+      flex: 1;
+      background: #222;
+      color: #ccc;
+      border: none;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .filters button.on { background: #2563eb; color: #fff; }
+
+    #list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 8px;
+    }
+
+    .item {
+      background: #222;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 6px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid #333;
+    }
+    .item.done {
+      opacity: 0.55;
+      border-color: #14532d;
+    }
+    .item .check {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #555;
+      border-radius: 6px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .item.done .check {
+      background: #22c55e;
+      border-color: #22c55e;
+      color: #fff;
+    }
+    .item .body { flex: 1; min-width: 0; }
+    .item .name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+    .item .meta { font-size: 11px; color: #888; display: flex; justify-content: space-between; }
+
+    .add-section {
+      padding: 10px 12px;
+      border-top: 1px solid #333;
+      background: #151515;
+    }
+    .add-section input {
+      width: 100%;
+      background: #222;
+      border: 1px solid #444;
+      color: #eee;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .add-row { display: flex; gap: 6px; }
+    .add-row .btn { flex: 1; }
+
+    #fab {
+      position: absolute;
+      bottom: 20px;
+      right: 16px;
+      z-index: 30;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      font-size: 22px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 16px;
+      left: 10px;
+      z-index: 15;
+      background: rgba(0,0,0,0.75);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .legend i {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div>
+        <h1>Rome Map</h1>
+        <div id="status">Location off</div>
+      </div>
+      <button class="btn" id="loc-btn">Locate</button>
+    </header>
+
+    <main>
+      <div id="map"></div>
+
+      <button id="fab" title="Open list">☰</button>
+
+      <div class="legend">
+        <div><i style="background:#ef4444"></i>Ancient</div>
+        <div><i style="background:#f97316"></i>Aventine</div>
+        <div><i style="background:#eab308"></i>Centro</div>
+        <div><i style="background:#22c55e"></i>Spanish / Popolo</div>
+        <div><i style="background:#3b82f6"></i>Vatican</div>
+        <div><i style="background:#a855f7"></i>S. Maria Maggiore</div>
+        <div><i style="background:#94a3b8"></i>Custom</div>
+      </div>
+
+      <aside id="panel" class="hidden">
+        <div class="panel-top">
+          <h2>Places</h2>
+          <button class="btn" id="close-btn">Close</button>
+        </div>
+        <div id="progress">0 / 0 visited</div>
+        <div class="filters">
+          <button class="on" data-f="all">All</button>
+          <button data-f="todo">To do</button>
+          <button data-f="done">Visited</button>
+        </div>
+        <div id="list"></div>
+
+        <div class="add-section">
+          <input id="new-name" type="text" placeholder="New place name…" />
+          <div class="add-row">
+            <button class="btn" id="add-here">Add at my location</button>
+            <button class="btn primary" id="add-custom">Add at map center</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // ---------- Data ----------
+    const DEFAULTS = [
+      { id: "colosseo", name: "Colosseo", lat: 41.8902, lng: 12.4922, cluster: "ancient", color: "#ef4444" },
+      { id: "foro-romano", name: "Foro Romano", lat: 41.8925, lng: 12.4853, cluster: "ancient", color: "#ef4444" },
+      { id: "arco-tito", name: "Arco di Tito", lat: 41.8906, lng: 12.4886, cluster: "ancient", color: "#ef4444" },
+      { id: "colle-palatino", name: "Colle Palatino", lat: 41.8894, lng: 12.4874, cluster: "ancient", color: "#ef4444" },
+      { id: "tempio-saturno", name: "Tempio di Saturno", lat: 41.8925, lng: 12.4842, cluster: "ancient", color: "#ef4444" },
+      { id: "foro-traiano", name: "Foro di Traiano", lat: 41.8955, lng: 12.4845, cluster: "ancient", color: "#ef4444" },
+      { id: "musei-capitolini", name: "Musei Capitolini", lat: 41.8931, lng: 12.4828, cluster: "ancient", color: "#ef4444" },
+      { id: "vittoriano", name: "Victor Emmanuel II", lat: 41.8947, lng: 12.4830, cluster: "ancient", color: "#ef4444" },
+      { id: "teatro-marcello", name: "Teatro di Marcello", lat: 41.8919, lng: 12.4799, cluster: "ancient", color: "#ef4444" },
+      { id: "bocca-verita", name: "Bocca della Verità", lat: 41.8881, lng: 12.4815, cluster: "ancient", color: "#ef4444" },
+      { id: "circo-massimo", name: "Circo Massimo", lat: 41.8860, lng: 12.4851, cluster: "ancient", color: "#ef4444" },
+      { id: "terme-caracalla", name: "Terme di Caracalla", lat: 41.8790, lng: 12.4924, cluster: "ancient", color: "#ef4444" },
+      { id: "keyhole", name: "Knights of Malta Keyhole", lat: 41.8834, lng: 12.4798, cluster: "aventine", color: "#f97316" },
+      { id: "pantheon", name: "Pantheon", lat: 41.8986, lng: 12.4769, cluster: "centro", color: "#eab308" },
+      { id: "piazza-navona", name: "Piazza Navona", lat: 41.8992, lng: 12.4731, cluster: "centro", color: "#eab308" },
+      { id: "trevi", name: "Fontana di Trevi", lat: 41.9009, lng: 12.4833, cluster: "centro", color: "#eab308" },
+      { id: "spanish-steps", name: "Spanish Steps", lat: 41.9059, lng: 12.4828, cluster: "spanish", color: "#22c55e" },
+      { id: "villa-medici", name: "Villa Medici", lat: 41.9080, lng: 12.4835, cluster: "spanish", color: "#22c55e" },
+      { id: "piazza-popolo", name: "Piazza del Popolo", lat: 41.9105, lng: 12.4768, cluster: "spanish", color: "#22c55e" },
+      { id: "palazzo-barberini", name: "Palazzo Barberini", lat: 41.9036, lng: 12.4899, cluster: "spanish", color: "#22c55e" },
+      { id: "palazzo-esposizioni", name: "Palazzo delle Esposizioni", lat: 41.8995, lng: 12.4930, cluster: "spanish", color: "#22c55e" },
+      { id: "san-pietro", name: "Basilica di San Pietro", lat: 41.9022, lng: 12.4539, cluster: "vatican", color: "#3b82f6" },
+      { id: "vatican-museums", name: "Vatican Museums", lat: 41.9065, lng: 12.4536, cluster: "vatican", color: "#3b82f6" },
+      { id: "castel-santangelo", name: "Castel Sant'Angelo", lat: 41.9031, lng: 12.4663, cluster: "vatican", color: "#3b82f6" },
+      { id: "santa-maria-maggiore", name: "Santa Maria Maggiore", lat: 41.8976, lng: 12.4985, cluster: "maggiore", color: "#a855f7" }
+    ];
+
+    const KEY_PLACES = "rome_places_v2";
+    const KEY_VISITED = "rome_visited_v2";
+
+    function loadPlaces() {
+      try {
+        const raw = localStorage.getItem(KEY_PLACES);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+      return DEFAULTS.slice();
+    }
+    function savePlaces(list) {
+      try { localStorage.setItem(KEY_PLACES, JSON.stringify(list)); } catch (e) {}
+    }
+    function loadVisited() {
+      try {
+        const raw = localStorage.getItem(KEY_VISITED);
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) { return {}; }
+    }
+    function saveVisited(obj) {
+      try { localStorage.setItem(KEY_VISITED, JSON.stringify(obj)); } catch (e) {}
+    }
+
+    let places = loadPlaces();
+    let visited = loadVisited();
+    let filter = "all";
+    let currentPos = null;
+    let markers = {};
+    let userMarker = null;
+    let watchId = null;
+
+    // ---------- Map ----------
+    const map = L.map("map", { zoomControl: true }).setView([41.895, 12.48], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    function icon(color, done) {
+      if (done) {
+        return L.divIcon({
+          className: "",
+          html: '<div style="width:16px;height:16px;background:#22c55e;border:2px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;box-shadow:0 1px 3px rgba(0,0,0,.4)">✓</div>',
+          iconSize: [16, 16], iconAnchor: [8, 8]
+        });
+      }
+      return L.divIcon({
+        className: "",
+        html: `<div style="width:12px;height:12px;background:${color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4)"></div>`,
+        iconSize: [12, 12], iconAnchor: [6, 6]
+      });
+    }
+
+    function popupHtml(p) {
+      const done = !!visited[p.id];
+      return `<b>${p.name}</b><br>
+        <button onclick="window._toggle('${p.id}')" style="margin-top:6px;padding:5px 10px;border:none;border-radius:5px;background:${done ? '#555' : '#22c55e'};color:#fff;font-size:12px;width:100%">
+          ${done ? 'Unmark' : 'Mark visited'}
+        </button>
+        ${p.custom ? `<button onclick="window._delete('${p.id}')" style="margin-top:4px;padding:5px 10px;border:none;border-radius:5px;background:#7f1d1d;color:#fff;font-size:12px;width:100%">Delete</button>` : ''}`;
+    }
+
+    function refreshMarkers() {
+      Object.values(markers).forEach(m => map.removeLayer(m));
+      markers = {};
+      places.forEach((p) => {
+        const m = L.marker([p.lat, p.lng], { icon: icon(p.color || "#94a3b8", !!visited[p.id]) })
+          .addTo(map)
+          .bindPopup(popupHtml(p));
+        markers[p.id] = m;
+      });
+    }
+
+    window._toggle = function(id) {
+      if (visited[id]) delete visited[id];
+      else visited[id] = true;
+      saveVisited(visited);
+      refreshMarkers();
+      renderList();
+      updateProgress();
+    };
+
+    window._delete = function(id) {
+      if (!confirm("Delete this custom place?")) return;
+      places = places.filter(p => p.id !== id);
+      delete visited[id];
+      savePlaces(places);
+      saveVisited(visited);
+      refreshMarkers();
+      renderList();
+      updateProgress();
+      map.closePopup();
+    };
+
+    // ---------- List ----------
+    function dist(a, b) {
+      const R = 6371000;
+      const dLat = (b.lat - a.lat) * Math.PI / 180;
+      const dLng = (b.lng - a.lng) * Math.PI / 180;
+      const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    }
+    function fmt(m) {
+      if (m == null) return "—";
+      return m < 1000 ? Math.round(m) + " m" : (m/1000).toFixed(1) + " km";
+    }
+
+    function updateProgress() {
+      const total = places.length;
+      const n = Object.keys(visited).length;
+      document.getElementById("progress").textContent = n + " / " + total + " visited";
+    }
+
+    function renderList() {
+      let list = places.map(p => ({
+        ...p,
+        d: currentPos ? dist(currentPos, p) : null,
+        done: !!visited[p.id]
+      }));
+
+      if (filter === "todo") list = list.filter(p => !p.done);
+      if (filter === "done") list = list.filter(p => p.done);
+
+      if (currentPos) list.sort((a,b) => (a.d||0) - (b.d||0));
+      else list.sort((a,b) => a.name.localeCompare(b.name));
+
+      const el = document.getElementById("list");
+      if (!list.length) {
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:13px">Nothing here</div>';
+        return;
+      }
+
+      el.innerHTML = list.map(p => `
+        <div class="item ${p.done ? 'done' : ''}" data-id="${p.id}">
+          <div class="check">${p.done ? '✓' : ''}</div>
+          <div class="body">
+            <div class="name">${p.name}</div>
+            <div class="meta">
+              <span>${fmt(p.d)}</span>
+              <span>${p.cluster || 'custom'}</span>
+            </div>
+          </div>
+        </div>
+      `).join("");
+
+      el.querySelectorAll(".item").forEach(row => {
+        const id = row.dataset.id;
+        row.querySelector(".check").onclick = (e) => {
+          e.stopPropagation();
+          window._toggle(id);
+        };
+        row.onclick = () => {
+          const p = places.find(x => x.id === id);
+          if (!p) return;
+          map.setView([p.lat, p.lng], 17);
+          if (markers[id]) markers[id].openPopup();
+        };
+      });
+    }
+
+    // ---------- Location ----------
+    const statusEl = document.getElementById("status");
+
+    function onPos(pos) {
+      currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const acc = Math.round(pos.coords.accuracy || 30);
+      statusEl.textContent = "Live ±" + acc + " m";
+      statusEl.className = "ok";
+
+      if (userMarker) userMarker.setLatLng([currentPos.lat, currentPos.lng]);
+      else {
+        userMarker = L.marker([currentPos.lat, currentPos.lng], {
+          icon: L.divIcon({
+            className: "",
+            html: '<div style="width:16px;height:16px;background:#2563eb;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 5px rgba(37,99,235,.35)"></div>',
+            iconSize: [16,16], iconAnchor: [8,8]
+          }),
+          zIndexOffset: 1000
+        }).addTo(map).bindPopup("You");
+      }
+      renderList();
+    }
+
+    function onErr(err) {
+      statusEl.textContent = err.message || "Location denied";
+      statusEl.className = "err";
+    }
+
+    function startLoc() {
+      if (!navigator.geolocation) {
+        statusEl.textContent = "Not supported";
+        statusEl.className = "err";
+        return;
+      }
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      statusEl.textContent = "Getting location…";
+      statusEl.className = "";
+      watchId = navigator.geolocation.watchPosition(onPos, onErr, {
+        enableHighAccuracy: true,
+        maximumAge: 4000,
+        timeout: 12000
+      });
+    }
+
+    document.getElementById("loc-btn").onclick = () => {
+      startLoc();
+      if (currentPos) map.setView([currentPos.lat, currentPos.lng], 16);
+    };
+
+    // ---------- Panel ----------
+    const panel = document.getElementById("panel");
+    document.getElementById("fab").onclick = () => panel.classList.toggle("hidden");
+    document.getElementById("close-btn").onclick = () => panel.classList.add("hidden");
+
+    document.querySelectorAll(".filters button").forEach(b => {
+      b.onclick = () => {
+        document.querySelectorAll(".filters button").forEach(x => x.classList.remove("on"));
+        b.classList.add("on");
+        filter = b.dataset.f;
+        renderList();
+      };
+    });
+
+    // ---------- Add places ----------
+    function uid() {
+      return "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+
+    document.getElementById("add-here").onclick = () => {
+      const name = document.getElementById("new-name").value.trim() || "My place";
+      if (!currentPos) {
+        alert("Turn on location first (Locate button)");
+        return;
+      }
+      const p = {
+        id: uid(),
+        name: name,
+        lat: currentPos.lat,
+        lng: currentPos.lng,
+        cluster: "custom",
+        color: "#94a3b8",
+        custom: true
+      };
+      places.push(p);
+      savePlaces(places);
+      document.getElementById("new-name").value = "";
+      refreshMarkers();
+      renderList();
+      updateProgress();
+      map.setView([p.lat, p.lng], 17);
+      if (markers[p.id]) markers[p.id].openPopup();
+    };
+
+    document.getElementById("add-custom").onclick = () => {
+      const name = document.getElementById("new-name").value.trim();
+      if (!name) {
+        alert("Enter a name first");
+        return;
+      }
+      const c = map.getCenter();
+      const p = {
+        id: uid(),
+        name: name,
+        lat: c.lat,
+        lng: c.lng,
+        cluster: "custom",
+        color: "#94a3b8",
+        custom: true
+      };
+      places.push(p);
+      savePlaces(places);
+      document.getElementById("new-name").value = "";
+      refreshMarkers();
+      renderList();
+      updateProgress();
+      map.setView([p.lat, p.lng], 17);
+      if (markers[p.id]) markers[p.id].openPopup();
+    };
+
+    // ---------- Init ----------
+    refreshMarkers();
+    updateProgress();
+    renderList();
+    startLoc();
+  </script>
+</body>
+</html>
